@@ -5,6 +5,7 @@ import plotly.express as px
 from mock_data import (
     CLIENTS,
     CALL_OUTCOMES,
+    CALL_DURATIONS_NO_PAYMENT,
     FLAGGED_CALLS,
     QA_CATEGORIES,
     TICKET_TYPES,
@@ -18,6 +19,7 @@ from llm_helper import (
     generate_ticket,
     extract_ticket_from_call,
 )
+from insights import evaluate_client
 
 st.set_page_config(page_title="Domu Ops Console", page_icon="🎙️", layout="wide")
 
@@ -127,6 +129,42 @@ elif page == "📊 Client Outcomes Dashboard":
             "answer_rate", "conversion_rate"]],
         use_container_width=True,
     )
+
+    # --- Actionable insights -------------------------------------------------
+    st.markdown("---")
+    st.markdown("### 🚦 Recommended actions")
+    st.caption(
+        "Metrics are automatically checked against target thresholds. Where a client is "
+        "underperforming, this points to a likely cause and a concrete next step — not just the number."
+    )
+
+    severity_order = {"High": 0, "Medium": 1, "OK": 2}
+    severity_icon = {"High": "🔴", "Medium": "🟡", "OK": "🟢"}
+
+    client_rows = df.to_dict("records")
+    all_findings = []
+    for row in client_rows:
+        for action in evaluate_client(row, CALL_DURATIONS_NO_PAYMENT):
+            all_findings.append((row, action))
+
+    all_findings.sort(key=lambda pair: severity_order[pair[1]["severity"]])
+
+    for row, action in all_findings:
+        if action["severity"] == "OK":
+            continue
+        icon = severity_icon[action["severity"]]
+        with st.expander(f"{icon} {row['name']} — {action['severity']} priority"):
+            st.markdown(f"**Finding:** {action['finding']}")
+            st.markdown(f"**Recommended action:** {action['recommended_action']}")
+            if st.button("Create engineering ticket from this", key=f"insight_ticket_{row['client_id']}_{action['finding'][:20]}"):
+                st.info(
+                    "This would pre-fill the Engineering Ticket Generator with this finding. "
+                    "(Wire-up left for the next iteration — see Scope of Work.)"
+                )
+
+    ok_clients = [row["name"] for row, action in all_findings if action["severity"] == "OK"]
+    if ok_clients:
+        st.success(f"✅ Within target on all metrics: {', '.join(ok_clients)}")
 
 # ---------------------------------------------------------------------------
 # TASK 3 — QA REVIEW
