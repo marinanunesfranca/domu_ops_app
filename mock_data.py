@@ -28,6 +28,21 @@ CALL_OUTCOMES = pd.DataFrame([
     {"client_id": "CLT-007", "calls_made": 990,  "answered": 615, "paid": 175, "failed": 375},
 ])
 
+# Duration (in seconds) at which answered calls ended, for calls that did NOT
+# result in a payment. In production this would come from the telephony
+# platform's call detail records. Used to detect early-hangup patterns —
+# e.g. a cluster of calls ending right around the point where the agent
+# discusses payment usually signals a prompt/objection-handling problem.
+CALL_DURATIONS_NO_PAYMENT = {
+    "CLT-001": [145, 152, 138, 160, 149, 155, 300, 410, 280],
+    "CLT-002": [210, 195, 320, 280, 260, 305, 240, 190],
+    "CLT-003": [40, 38, 45, 42, 39, 41, 44, 37, 43, 40],  # cluster of very early hangups
+    "CLT-004": [50, 48, 55, 52, 49, 51, 47, 53, 46, 54, 52],  # cluster of very early hangups
+    "CLT-005": [220, 240, 260, 250, 230, 245, 235],
+    "CLT-006": [180, 190, 175, 200, 185, 195],
+    "CLT-007": [250, 260, 240, 255, 245, 265, 235],
+}
+
 # ---- Task 3: flagged QA calls ----------------------------------------------
 
 FLAGGED_CALLS = [
