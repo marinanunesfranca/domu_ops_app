@@ -20,6 +20,7 @@ USE_LIVE_LLM = True  # flip to True once ANTHROPIC_API_KEY is set in secrets
 def _call_claude(system: str, user_prompt: str) -> str:
     """Real call to the Anthropic API. Only used if USE_LIVE_LLM is True."""
     import anthropic
+    import streamlit as st
 
     client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
     resp = client.messages.create(
@@ -29,7 +30,6 @@ def _call_claude(system: str, user_prompt: str) -> str:
         messages=[{"role": "user", "content": user_prompt}],
     )
     return "".join(block.text for block in resp.content if block.type == "text")
-
 
 def generate_call_flow(raw_script: str) -> str:
     """Task 1: turn a raw client call script into a structured call flow + voice agent prompt."""
