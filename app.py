@@ -57,7 +57,7 @@ operational triage:
 | 5 | Turn a client request into an engineering-ready ticket | Engineering Ticket Generator |
 
 Use the sidebar to move between screens. Each screen works standalone with mock
-data so it can be demoed without live integrations.
+data and live integration with Claude to generate the answers.
         """
     )
     st.info(
