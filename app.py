@@ -9,9 +9,15 @@ from mock_data import (
     QA_CATEGORIES,
     TICKET_TYPES,
     PRIORITIES,
+    ACTIONABLE_CALLS,
     get_client_by_id,
 )
-from llm_helper import generate_call_flow, suggest_qa_category, generate_ticket
+from llm_helper import (
+    generate_call_flow,
+    suggest_qa_category,
+    generate_ticket,
+    extract_ticket_from_call,
+)
 
 st.set_page_config(page_title="Domu Ops Console", page_icon="🎙️", layout="wide")
 
@@ -154,25 +160,79 @@ elif page == "🚩 QA Review":
 # ---------------------------------------------------------------------------
 elif page == "🎫 Engineering Ticket Generator":
     st.title("🎫 Engineering Ticket Generator")
-    st.caption("Task 5 — Turn a client request into an engineering-ready ticket")
-
-    client_options = {f"{c['name']} ({c['client_id']})": c for c in CLIENTS}
-    chosen_label = st.selectbox("Client", list(client_options.keys()))
-    client = client_options[chosen_label]
-
-    ticket_type = st.selectbox("Ticket type", TICKET_TYPES)
-    priority = st.selectbox("Priority", PRIORITIES)
-    description = st.text_area(
-        "Describe the request as reported by the client",
-        placeholder="Client wants to add Apple Pay as a payment option for their outbound collections calls.",
-        height=140,
+    st.caption(
+        "Task 5 — Requests detected in calls are auto-drafted into tickets here. "
+        "A human reviews, edits if needed, and sends — no one has to write these up from scratch."
     )
 
-    if st.button("Generate ticket", type="primary"):
-        if not description.strip():
-            st.warning("Add a description first.")
-        else:
-            with st.spinner("Drafting ticket..."):
-                ticket = generate_ticket(client, ticket_type, priority, description)
-            st.markdown(ticket)
-            st.download_button("Download as .md", ticket, file_name="engineering_ticket.md")
+    tab_queue, tab_manual = st.tabs(["📥 Auto-detected requests", "✍️ Manual ticket"])
+
+    # --- Automated path: tickets pre-drafted from call transcripts ---------
+    with tab_queue:
+        st.caption(
+            "In production, a background job scans new call transcripts and flags ones "
+            "containing an actionable request. Below is what that queue would look like."
+        )
+        for call in ACTIONABLE_CALLS:
+            client = get_client_by_id(call["client_id"])
+            client_name = client["name"] if client else call["client_id"]
+            with st.expander(f"{call['call_id']} — {client_name} — \"{call['detected_request']}\""):
+                st.write(f"**Transcript excerpt:** {call['transcript_snippet']}")
+
+                draft_key = f"draft_{call['call_id']}"
+                if draft_key not in st.session_state:
+                    st.session_state[draft_key] = extract_ticket_from_call(
+                        call["transcript_snippet"], call["detected_request"]
+                    )
+
+                ticket_type = st.selectbox(
+                    "Ticket type", TICKET_TYPES,
+                    index=TICKET_TYPES.index(call["suggested_type"]),
+                    key=f"type_{call['call_id']}",
+                )
+                priority = st.selectbox(
+                    "Priority", PRIORITIES,
+                    index=PRIORITIES.index(call["suggested_priority"]),
+                    key=f"prio_{call['call_id']}",
+                )
+                edited_description = st.text_area(
+                    "Draft description (auto-generated — edit before sending if needed)",
+                    value=st.session_state[draft_key],
+                    key=f"desc_{call['call_id']}",
+                    height=120,
+                )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Approve & Send", key=f"send_{call['call_id']}", type="primary"):
+                        final_ticket = generate_ticket(client, ticket_type, priority, edited_description)
+                        st.success(f"Ticket sent to engineering for {call['call_id']}.")
+                        st.markdown(final_ticket)
+                with col2:
+                    if st.button("🚫 Dismiss (not actionable)", key=f"dismiss_{call['call_id']}"):
+                        st.info(f"{call['call_id']} dismissed — no ticket created.")
+
+    # --- Manual fallback: for requests that didn't come from a call --------
+    with tab_manual:
+        st.caption("For requests reported outside a call (email, Slack, client meeting, etc.)")
+        client_options = {f"{c['name']} ({c['client_id']})": c for c in CLIENTS}
+        chosen_label = st.selectbox("Client", list(client_options.keys()))
+        client = client_options[chosen_label]
+
+        ticket_type = st.selectbox("Ticket type", TICKET_TYPES, key="manual_type")
+        priority = st.selectbox("Priority", PRIORITIES, key="manual_priority")
+        description = st.text_area(
+            "Describe the request",
+            placeholder="Client wants to add Apple Pay as a payment option for their outbound collections calls.",
+            height=140,
+            key="manual_description",
+        )
+
+        if st.button("Generate ticket", type="primary", key="manual_generate"):
+            if not description.strip():
+                st.warning("Add a description first.")
+            else:
+                with st.spinner("Drafting ticket..."):
+                    ticket = generate_ticket(client, ticket_type, priority, description)
+                st.markdown(ticket)
+                st.download_button("Download as .md", ticket, file_name="engineering_ticket.md")
