@@ -34,7 +34,7 @@ page = st.sidebar.radio("Navigate", PAGES, label_visibility="collapsed")
 
 st.sidebar.markdown("---")
 st.sidebar.caption(
-    "⚠️ Demo mode: data is mocked and LLM calls use offline templates unless "
+    "⚠️ Demo mode: data is mocked and LLM calls use offline templates."
 )
 
 # ---------------------------------------------------------------------------
