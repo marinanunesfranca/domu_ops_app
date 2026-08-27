@@ -80,6 +80,28 @@ def suggest_qa_category(transcript_snippet: str, hint: str) -> str:
     return f"[DEMO MODE] Suggested category based on pattern match: **{hint}**. Confirm or override below."
 
 
+def extract_ticket_from_call(transcript_snippet: str, detected_request: str) -> str:
+    """
+    Task 5 (automated path): given a call transcript that has already been
+    flagged as containing an actionable request, draft the ticket description
+    an engineer would need — without a human having to type it up first.
+    In production this would run as a background job right after the call ends.
+    """
+    if USE_LIVE_LLM:
+        system = (
+            "You are drafting an engineering ticket description from a call transcript "
+            "snippet. Be specific about what the customer/client asked for and any "
+            "relevant context from the call. Do not invent details not present in the transcript."
+        )
+        return _call_claude(system, f"Detected request: {detected_request}\nTranscript: {transcript_snippet}")
+
+    return (
+        f"[DEMO MODE] Based on the call transcript, the customer/client raised the "
+        f"following: \"{detected_request}\". Relevant excerpt: \"{transcript_snippet}\". "
+        f"Recommend confirming feasibility and rollout scope with the client before implementation."
+    )
+
+
 def generate_ticket(client, ticket_type, priority, description) -> str:
     """Task 5: turn a reported issue into an engineering-ready ticket."""
     if USE_LIVE_LLM:
