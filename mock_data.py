@@ -64,7 +64,11 @@ QA_CATEGORIES = [
     "Other / needs review",
 ]
 
-# ---- Task 5: ticket generator ---------------------------------------------
+# ---- Task 5: ticket generator ----------------------------------------------
+# In production, this list would be populated automatically by a background
+# job that scans new call transcripts for actionable requests (e.g. a customer
+# or client asking for a new payment method, a feature, a change to the flow).
+# Here it's mocked as a queue of calls already flagged as "contains a request".
 
 TICKET_TYPES = [
     "New payment option",
@@ -75,6 +79,45 @@ TICKET_TYPES = [
 ]
 
 PRIORITIES = ["Low", "Medium", "High", "Urgent"]
+
+ACTIONABLE_CALLS = [
+    {
+        "call_id": "CALL-90112",
+        "client_id": "CLT-002",
+        "transcript_snippet": (
+            "Customer: 'Do you guys take Apple Pay? I don't have my card on me but I "
+            "have my phone.' Agent: 'We currently don't support that, but I can note "
+            "it for the account.'"
+        ),
+        "detected_request": "Customer asked for Apple Pay support",
+        "suggested_type": "New payment option",
+        "suggested_priority": "Medium",
+    },
+    {
+        "call_id": "CALL-90144",
+        "client_id": "CLT-006",
+        "transcript_snippet": (
+            "Client QA note (internal call, not customer-facing): 'We keep seeing calls "
+            "drop right after the verification step for accounts with international "
+            "phone numbers.'"
+        ),
+        "detected_request": "Call flow may be failing verification for international numbers",
+        "suggested_type": "Call flow bug",
+        "suggested_priority": "High",
+    },
+    {
+        "call_id": "CALL-90201",
+        "client_id": "CLT-004",
+        "transcript_snippet": (
+            "Customer: 'Can I split this into two payments, like half now and half "
+            "next week?' Agent: 'Let me note that request, that's not something I can "
+            "set up right now.'"
+        ),
+        "detected_request": "Customer asked for a split/partial payment option",
+        "suggested_type": "New payment option",
+        "suggested_priority": "Medium",
+    },
+]
 
 
 def get_client_by_id(client_id: str):
