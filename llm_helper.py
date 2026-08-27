@@ -12,14 +12,14 @@ secret and flip USE_LIVE_LLM to True.
 
 import os
 
-USE_LIVE_LLM = False  # flip to True once ANTHROPIC_API_KEY is set in secrets
+from mock_data import QA_CATEGORIES
+
+USE_LIVE_LLM = True  # flip to True once ANTHROPIC_API_KEY is set in secrets
 
 
 def _call_claude(system: str, user_prompt: str) -> str:
     """Real call to the Anthropic API. Only used if USE_LIVE_LLM is True."""
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    import streamlit as st client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
     resp = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1500,
@@ -31,15 +31,26 @@ def _call_claude(system: str, user_prompt: str) -> str:
 
 def generate_call_flow(raw_script: str) -> str:
     """Task 1: turn a raw client call script into a structured call flow + voice agent prompt."""
-    system = (
-        "You are a conversation designer for an outbound voice AI collections agent. "
-        "Given a raw call script from a client, produce: "
-        "1) a structured call flow (greeting, verification, purpose, objection handling, "
-        "payment capture, closing, fallback/escalation paths) as numbered steps with branches, "
-        "2) a ready-to-use system prompt for the voice agent that encodes tone, compliance "
-        "guardrails (no threats, no false statements about credit reporting, always allow opt-out), "
-        "and the branching logic."
-    )
+    system = """You are a senior conversation designer building outbound voice AI agents for debt collection and payment reminder calls.
+
+You will be given a client's raw call script (as used by human agents today). Convert it into two things, and output ONLY the following, in this exact structure:
+
+## Structured Call Flow
+A numbered list of call stages (greeting, identity verification, purpose, payment options, objection handling, payment capture, compliance disclosures, closing). For any stage with branches (e.g. objection handling), use lettered sub-steps (4a, 4b...) showing the condition and where it routes.
+
+## Voice Agent System Prompt
+A complete, ready-to-paste system prompt for the voice agent, written in second person ("You are..."), that:
+- Encodes the tone and specific language actually present in the client's raw script (don't genericize it away)
+- Never states or implies legal consequences, credit bureau reporting, wage garnishment, or arrest unless that exact language appears in the client's raw script
+- Always includes an opt-out / do-not-call path
+- Instructs the agent to escalate to a human if the customer expresses hardship, distress, or disputes the debt
+- Keeps individual agent responses short (1-2 sentences)
+
+Hard rules:
+- Do not invent payment methods, amounts, or legal claims not present in the raw script.
+- If the raw script is missing something essential (e.g. no verification step), flag it in a final "## Gaps to confirm with client" section instead of inventing content.
+- Do not include any preamble, meta-commentary, or text outside the three headers above."""
+
     if USE_LIVE_LLM:
         return _call_claude(system, raw_script)
 
@@ -75,7 +86,15 @@ terms, payment options, and any client-approved disclosures.
 def suggest_qa_category(transcript_snippet: str, hint: str) -> str:
     """Task 3: suggest a QA category for a flagged call."""
     if USE_LIVE_LLM:
-        system = "Classify this flagged call snippet into exactly one QA category and explain briefly why."
+        categories_list = "\n".join(f"- {c}" for c in QA_CATEGORIES)
+        system = f"""You are a QA reviewer for outbound voice AI collections calls.
+
+Given a transcript snippet from a flagged call, choose EXACTLY ONE category from this closed list (do not invent a new one):
+{categories_list}
+
+Output in this exact format, nothing else:
+**Category:** <one category from the list, verbatim>
+**Why:** <one sentence, referencing specific evidence from the transcript>"""
         return _call_claude(system, transcript_snippet)
     return f"[DEMO MODE] Suggested category based on pattern match: **{hint}**. Confirm or override below."
 
@@ -88,11 +107,14 @@ def extract_ticket_from_call(transcript_snippet: str, detected_request: str) -> 
     In production this would run as a background job right after the call ends.
     """
     if USE_LIVE_LLM:
-        system = (
-            "You are drafting an engineering ticket description from a call transcript "
-            "snippet. Be specific about what the customer/client asked for and any "
-            "relevant context from the call. Do not invent details not present in the transcript."
-        )
+        system = """You are drafting the "description" field of an engineering ticket, based on a flagged call transcript. This is NOT the full ticket — just a 2-4 sentence description an engineer would read to understand the request.
+
+Write it to:
+- State plainly what was asked for or what problem occurred, in plain business language (not a transcript quote)
+- Include any concrete detail present in the transcript that would affect implementation (e.g. a specific payment method named, a specific condition under which a bug occurs)
+- End with one open question or dependency an engineer would need answered before starting, if one is evident from the transcript
+
+Do not invent details not present in the transcript or detected request. Do not include a title, headers, or acceptance criteria — just the description text."""
         return _call_claude(system, f"Detected request: {detected_request}\nTranscript: {transcript_snippet}")
 
     return (
@@ -105,12 +127,30 @@ def extract_ticket_from_call(transcript_snippet: str, detected_request: str) -> 
 def generate_ticket(client, ticket_type, priority, description) -> str:
     """Task 5: turn a reported issue into an engineering-ready ticket."""
     if USE_LIVE_LLM:
-        system = (
-            "Write a clear, actionable engineering ticket (title, context, acceptance criteria, "
-            "affected client, priority) from the following report."
-        )
+        client_name = client["name"] if client else "Unknown client"
+        client_id = client["client_id"] if client else "N/A"
+        system = f"""You are a Technical Ops Lead writing an engineering ticket from a client request or reported issue. Write ONLY the ticket, in exactly this Markdown structure and nothing else:
+
+**Title:** [{ticket_type}] {client_name} — <5-8 word summary of the specific request>
+
+**Client:** {client_name} ({client_id})
+**Priority:** {priority}
+**Type:** {ticket_type}
+
+**Context:**
+<2-4 sentences explaining the request/issue in plain business language, using only details given below>
+
+**Acceptance Criteria:**
+- [ ] <specific, testable criterion tied to this exact request>
+- [ ] <verification step, e.g. staging test before enabling in production>
+- [ ] <rollout/communication step if relevant, e.g. notifying the client once live>
+
+**Notes for engineering:**
+<any open question, dependency, or scope boundary an engineer should know before starting — only include if evident from the report, otherwise omit this line>
+
+Do not invent scope, payment amounts, or technical implementation details not implied by the report below."""
         user_prompt = (
-            f"Client: {client}\nType: {ticket_type}\nPriority: {priority}\nReport: {description}"
+            f"Client: {client_name} ({client_id})\nType: {ticket_type}\nPriority: {priority}\nReport: {description}"
         )
         return _call_claude(system, user_prompt)
 
