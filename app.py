@@ -30,13 +30,11 @@ PAGES = [
 ]
 
 st.sidebar.title("Domu Ops Console")
-st.sidebar.caption("MVP — proof of concept for Tech Ops automation")
 page = st.sidebar.radio("Navigate", PAGES, label_visibility="collapsed")
 
 st.sidebar.markdown("---")
 st.sidebar.caption(
     "⚠️ Demo mode: data is mocked and LLM calls use offline templates unless "
-    "ANTHROPIC_API_KEY is configured (see llm_helper.py)."
 )
 
 # ---------------------------------------------------------------------------
